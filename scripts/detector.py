@@ -1,430 +1,419 @@
 #!/usr/bin/env python3
 """
-detector.py - Tool detection module for Dev Environment Readyifier
+detector.py - Environment detection for Dev Environment Readyifier
 
-This module scans the system for installed IDEs, AI tools, and extensions.
-It provides a comprehensive inventory of what's available for configuration.
+This script handles the detection of installed development environments,
+tools, and extensions.
 """
 
 import os
 import sys
-import subprocess
 import json
 import platform
+import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Any, Optional
 
 class EnvironmentDetector:
-    """Detects installed development tools and environments."""
+    """Detects installed development environments, tools, and extensions."""
     
     def __init__(self):
+        """Initialize the environment detector."""
         self.os_type = platform.system()
-        self.detected_tools = {}
-        self.conda_environments = []
-        self.vscode_extensions = []
-        
-    def detect_all(self) -> Dict:
-        """Run all detection methods and return comprehensive results."""
-        print("Scanning system for installed development tools...")
-        
-        self.detect_os_info()
-        self.detect_ides()
-        self.detect_ai_tools()
-        self.detect_conda_environments()
-        self.detect_vscode_extensions()
-        
-        return {
-            "os_info": self.os_info,
-            "ides": self.detected_tools.get("ides", {}),
-            "ai_tools": self.detected_tools.get("ai_tools", {}),
-            "conda_environments": self.conda_environments,
-            "vscode_extensions": self.vscode_extensions
+        self.os_release = platform.release()
+        self.python_version = platform.python_version()
+    
+    def detect_environments(self) -> Dict[str, Any]:
+        """Detect all installed development environments and tools."""
+        results = {
+            "os_info": {
+                "system": self.os_type,
+                "release": self.os_release,
+                "python_version": self.python_version
+            },
+            "ides": {},
+            "ai_tools": {},
+            "conda_environments": self._detect_conda_environments(),
+            "vscode_extensions": []
         }
-    
-    def detect_os_info(self) -> Dict:
-        """Detect operating system information."""
-        self.os_info = {
-            "system": platform.system(),
-            "release": platform.release(),
-            "version": platform.version(),
-            "architecture": platform.machine(),
-            "processor": platform.processor(),
-            "python_version": platform.python_version(),
-        }
-        return self.os_info
-    
-    def detect_ides(self) -> Dict:
-        """Detect installed IDEs."""
-        ides = {}
         
-        # VS Code detection
-        vscode_paths = self._find_vscode_installations()
-        if vscode_paths:
-            ides["vscode"] = {
-                "installed": True,
-                "paths": vscode_paths,
-                "version": self._get_vscode_version(vscode_paths[0]) if vscode_paths else None
+        # Detect IDEs
+        vscode_path = self._detect_vscode()
+        if vscode_path:
+            results["ides"]["vscode"] = {
+                "version": self._get_vscode_version("vscode"),
+                "path": vscode_path
+            }
+            results["vscode_extensions"] = self._detect_vscode_extensions("vscode")
+        
+        vscode_insiders_path = self._detect_vscode_insiders()
+        if vscode_insiders_path:
+            results["ides"]["vscode_insiders"] = {
+                "version": self._get_vscode_version("vscode_insiders"),
+                "path": vscode_insiders_path
             }
         
-        # VS Code Insiders detection
-        vscode_insiders_paths = self._find_vscode_insiders_installations()
-        if vscode_insiders_paths:
-            ides["vscode_insiders"] = {
-                "installed": True,
-                "paths": vscode_insiders_paths,
-                "version": self._get_vscode_version(vscode_insiders_paths[0]) if vscode_insiders_paths else None
+        trae_path = self._detect_trae()
+        if trae_path:
+            results["ides"]["trae"] = {
+                "version": "Unknown",  # Would need specific version detection
+                "path": trae_path
             }
         
-        # Trae IDE detection
-        trae_paths = self._find_trae_installations()
-        if trae_paths:
-            ides["trae"] = {
-                "installed": True,
-                "paths": trae_paths,
-                "version": self._get_generic_version("trae")
+        void_path = self._detect_void()
+        if void_path:
+            results["ides"]["void"] = {
+                "version": "Unknown",  # Would need specific version detection
+                "path": void_path
             }
         
-        # VOID IDE detection
-        void_paths = self._find_void_installations()
-        if void_paths:
-            ides["void"] = {
-                "installed": True,
-                "paths": void_paths,
-                "version": self._get_generic_version("void")
-            }
-        
-        self.detected_tools["ides"] = ides
-        return ides
-    
-    def detect_ai_tools(self) -> Dict:
-        """Detect installed AI coding tools."""
-        ai_tools = {}
-        
-        # Cline detection
-        cline_path = self._find_executable("cline")
+        # Detect AI tools
+        cline_path = self._detect_cline()
         if cline_path:
-            ai_tools["cline"] = {
-                "installed": True,
-                "path": cline_path,
-                "version": self._get_cli_version("cline --version")
+            results["ai_tools"]["cline"] = {
+                "version": self._get_tool_version("cline"),
+                "path": cline_path
             }
         
-        # Roo Code detection
-        roo_path = self._find_executable("roo")
+        roo_path = self._detect_roo()
         if roo_path:
-            ai_tools["roo"] = {
-                "installed": True,
-                "path": roo_path,
-                "version": self._get_cli_version("roo --version")
+            results["ai_tools"]["roo"] = {
+                "version": "Unknown",  # Would need specific version detection
+                "path": roo_path
             }
         
-        # Aider detection
-        aider_path = self._find_executable("aider")
+        aider_path = self._detect_aider()
         if aider_path:
-            ai_tools["aider"] = {
-                "installed": True,
-                "path": aider_path,
-                "version": self._get_cli_version("aider --version")
+            results["ai_tools"]["aider"] = {
+                "version": self._get_tool_version("aider"),
+                "path": aider_path
             }
         
-        self.detected_tools["ai_tools"] = ai_tools
-        return ai_tools
+        return results
     
-    def detect_conda_environments(self) -> List[Dict]:
-        """Detect Conda environments."""
+    def _detect_vscode(self) -> Optional[str]:
+        """Detect if Visual Studio Code is installed."""
         try:
-            # Check if conda is installed
-            conda_path = self._find_executable("conda")
-            if not conda_path:
-                return []
-            
-            # Get list of conda environments
-            result = subprocess.run(
-                ["conda", "env", "list", "--json"], 
-                capture_output=True, 
-                text=True, 
-                check=False
-            )
-            
-            if result.returncode == 0:
-                env_data = json.loads(result.stdout)
-                self.conda_environments = [
-                    {
-                        "name": env.split('/')[-1] if '/' in env else env,
-                        "path": env
-                    }
-                    for env in env_data.get("envs", [])
-                ]
-            
-            return self.conda_environments
-        except Exception as e:
-            print(f"Error detecting conda environments: {e}")
-            return []
-    
-    def detect_vscode_extensions(self) -> List[Dict]:
-        """Detect installed VS Code extensions."""
-        try:
-            vscode_paths = self._find_vscode_installations()
-            if not vscode_paths:
-                return []
-            
-            # Try to get extensions using code CLI
-            result = subprocess.run(
-                ["code", "--list-extensions"], 
-                capture_output=True, 
-                text=True, 
-                check=False
-            )
-            
-            if result.returncode == 0:
-                extensions = result.stdout.strip().split('\n')
-                self.vscode_extensions = [
-                    {"id": ext, "name": ext.split('.')[-1]} 
-                    for ext in extensions if ext
-                ]
-            
-            return self.vscode_extensions
-        except Exception as e:
-            print(f"Error detecting VS Code extensions: {e}")
-            return []
-    
-    def _find_vscode_installations(self) -> List[str]:
-        """Find VS Code installation paths."""
-        paths = []
-        
-        if self.os_type == "Darwin":  # macOS
-            app_paths = [
-                "/Applications/Visual Studio Code.app",
-                str(Path.home() / "Applications/Visual Studio Code.app")
-            ]
-            paths = [p for p in app_paths if os.path.exists(p)]
-            
-        elif self.os_type == "Linux":
-            # Check common Linux installation paths
-            possible_paths = [
-                "/usr/bin/code",
-                "/usr/local/bin/code",
-                str(Path.home() / ".local/bin/code")
-            ]
-            paths = [p for p in possible_paths if os.path.exists(p)]
-            
-        elif self.os_type == "Windows":
-            # Check common Windows installation paths
-            possible_paths = [
-                r"C:\Program Files\Microsoft VS Code\Code.exe",
-                r"C:\Program Files (x86)\Microsoft VS Code\Code.exe",
-                str(Path.home() / "AppData/Local/Programs/Microsoft VS Code/Code.exe")
-            ]
-            paths = [p for p in possible_paths if os.path.exists(p)]
-        
-        return paths
-    
-    def _find_vscode_insiders_installations(self) -> List[str]:
-        """Find VS Code Insiders installation paths."""
-        paths = []
-        
-        if self.os_type == "Darwin":  # macOS
-            app_paths = [
-                "/Applications/Visual Studio Code - Insiders.app",
-                str(Path.home() / "Applications/Visual Studio Code - Insiders.app")
-            ]
-            paths = [p for p in app_paths if os.path.exists(p)]
-            
-        elif self.os_type == "Linux":
-            # Check common Linux installation paths
-            possible_paths = [
-                "/usr/bin/code-insiders",
-                "/usr/local/bin/code-insiders",
-                str(Path.home() / ".local/bin/code-insiders")
-            ]
-            paths = [p for p in possible_paths if os.path.exists(p)]
-            
-        elif self.os_type == "Windows":
-            # Check common Windows installation paths
-            possible_paths = [
-                r"C:\Program Files\Microsoft VS Code Insiders\Code - Insiders.exe",
-                r"C:\Program Files (x86)\Microsoft VS Code Insiders\Code - Insiders.exe",
-                str(Path.home() / "AppData/Local/Programs/Microsoft VS Code Insiders/Code - Insiders.exe")
-            ]
-            paths = [p for p in possible_paths if os.path.exists(p)]
-        
-        return paths
-    
-    def _find_trae_installations(self) -> List[str]:
-        """Find Trae IDE installation paths."""
-        # This is a placeholder - adjust based on actual Trae IDE installation paths
-        paths = []
-        
-        if self.os_type == "Darwin":  # macOS
-            app_paths = [
-                "/Applications/Trae.app",
-                str(Path.home() / "Applications/Trae.app")
-            ]
-            paths = [p for p in app_paths if os.path.exists(p)]
-            
-        elif self.os_type == "Linux":
-            # Check common Linux installation paths
-            possible_paths = [
-                "/usr/bin/trae",
-                "/usr/local/bin/trae",
-                str(Path.home() / ".local/bin/trae")
-            ]
-            paths = [p for p in possible_paths if os.path.exists(p)]
-            
-        elif self.os_type == "Windows":
-            # Check common Windows installation paths
-            possible_paths = [
-                r"C:\Program Files\Trae\Trae.exe",
-                r"C:\Program Files (x86)\Trae\Trae.exe",
-                str(Path.home() / "AppData/Local/Programs/Trae/Trae.exe")
-            ]
-            paths = [p for p in possible_paths if os.path.exists(p)]
-        
-        return paths
-    
-    def _find_void_installations(self) -> List[str]:
-        """Find VOID IDE installation paths."""
-        # This is a placeholder - adjust based on actual VOID IDE installation paths
-        paths = []
-        
-        if self.os_type == "Darwin":  # macOS
-            app_paths = [
-                "/Applications/VOID.app",
-                str(Path.home() / "Applications/VOID.app")
-            ]
-            paths = [p for p in app_paths if os.path.exists(p)]
-            
-        elif self.os_type == "Linux":
-            # Check common Linux installation paths
-            possible_paths = [
-                "/usr/bin/void",
-                "/usr/local/bin/void",
-                str(Path.home() / ".local/bin/void")
-            ]
-            paths = [p for p in possible_paths if os.path.exists(p)]
-            
-        elif self.os_type == "Windows":
-            # Check common Windows installation paths
-            possible_paths = [
-                r"C:\Program Files\VOID\VOID.exe",
-                r"C:\Program Files (x86)\VOID\VOID.exe",
-                str(Path.home() / "AppData/Local/Programs/VOID/VOID.exe")
-            ]
-            paths = [p for p in possible_paths if os.path.exists(p)]
-        
-        return paths
-    
-    def _find_executable(self, name: str) -> Optional[str]:
-        """Find an executable in PATH."""
-        try:
-            if self.os_type == "Windows":
-                # On Windows, check if the command exists using where
+            if self.os_type == "Darwin":  # macOS
+                app_path = "/Applications/Visual Studio Code.app"
+                if os.path.exists(app_path):
+                    return app_path
+                
+                # Check if installed via Homebrew
                 result = subprocess.run(
-                    ["where", name], 
-                    capture_output=True, 
-                    text=True, 
-                    check=False
-                )
-                if result.returncode == 0:
-                    return result.stdout.strip().split('\n')[0]
-            else:
-                # On Unix-like systems, use which
-                result = subprocess.run(
-                    ["which", name], 
-                    capture_output=True, 
-                    text=True, 
-                    check=False
+                    "which code", 
+                    shell=True, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    text=True
                 )
                 if result.returncode == 0:
                     return result.stdout.strip()
-        except Exception:
-            pass
-        
-        return None
-    
-    def _get_vscode_version(self, path: str) -> Optional[str]:
-        """Get VS Code version."""
-        try:
-            if os.path.isdir(path):  # macOS .app bundle
-                # For macOS, the executable is inside the .app bundle
-                if self.os_type == "Darwin":
-                    code_path = os.path.join(path, "Contents/Resources/app/bin/code")
-                    if not os.path.exists(code_path):
-                        return None
-                    
-                    result = subprocess.run(
-                        [code_path, "--version"], 
-                        capture_output=True, 
-                        text=True, 
-                        check=False
-                    )
-                    if result.returncode == 0:
-                        return result.stdout.strip().split('\n')[0]
-            else:
-                # Direct executable path
+            elif self.os_type == "Linux":
                 result = subprocess.run(
-                    [path, "--version"], 
-                    capture_output=True, 
-                    text=True, 
-                    check=False
+                    "which code", 
+                    shell=True, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    text=True
                 )
                 if result.returncode == 0:
-                    return result.stdout.strip().split('\n')[0]
+                    return result.stdout.strip()
+            elif self.os_type == "Windows":
+                # Check common installation paths
+                paths = [
+                    os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "Microsoft VS Code", "Code.exe"),
+                    os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "Microsoft VS Code", "Code.exe"),
+                    os.path.join(os.environ.get("LOCALAPPDATA", "C:\\Users\\User\\AppData\\Local"), "Programs", "Microsoft VS Code", "Code.exe")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            
+            return None
         except Exception:
-            pass
-        
-        return None
+            return None
     
-    def _get_cli_version(self, command: str) -> Optional[str]:
-        """Get version from CLI tool."""
+    def _detect_vscode_insiders(self) -> Optional[str]:
+        """Detect if Visual Studio Code Insiders is installed."""
+        try:
+            if self.os_type == "Darwin":  # macOS
+                app_path = "/Applications/Visual Studio Code - Insiders.app"
+                if os.path.exists(app_path):
+                    return app_path
+                
+                # Check if installed via Homebrew
+                result = subprocess.run(
+                    "which code-insiders", 
+                    shell=True, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                if result.returncode == 0:
+                    return result.stdout.strip()
+            elif self.os_type == "Linux":
+                result = subprocess.run(
+                    "which code-insiders", 
+                    shell=True, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                if result.returncode == 0:
+                    return result.stdout.strip()
+            elif self.os_type == "Windows":
+                # Check common installation paths
+                paths = [
+                    os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "Microsoft VS Code Insiders", "Code - Insiders.exe"),
+                    os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "Microsoft VS Code Insiders", "Code - Insiders.exe"),
+                    os.path.join(os.environ.get("LOCALAPPDATA", "C:\\Users\\User\\AppData\\Local"), "Programs", "Microsoft VS Code Insiders", "Code - Insiders.exe")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            
+            return None
+        except Exception:
+            return None
+    
+    def _detect_trae(self) -> Optional[str]:
+        """Detect if Trae IDE is installed."""
+        try:
+            if self.os_type == "Darwin":  # macOS
+                app_path = "/Applications/Trae.app"
+                if os.path.exists(app_path):
+                    return app_path
+            elif self.os_type == "Linux":
+                # Check common installation paths
+                paths = [
+                    "/usr/bin/trae",
+                    "/usr/local/bin/trae",
+                    os.path.join(str(Path.home()), ".local", "bin", "trae")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            elif self.os_type == "Windows":
+                # Check common installation paths
+                paths = [
+                    os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "Trae", "Trae.exe"),
+                    os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "Trae", "Trae.exe"),
+                    os.path.join(os.environ.get("LOCALAPPDATA", "C:\\Users\\User\\AppData\\Local"), "Programs", "Trae", "Trae.exe")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            
+            return None
+        except Exception:
+            return None
+    
+    def _detect_void(self) -> Optional[str]:
+        """Detect if VOID IDE is installed."""
+        try:
+            if self.os_type == "Darwin":  # macOS
+                app_path = "/Applications/VOID.app"
+                if os.path.exists(app_path):
+                    return app_path
+            elif self.os_type == "Linux":
+                # Check common installation paths
+                paths = [
+                    "/usr/bin/void",
+                    "/usr/local/bin/void",
+                    os.path.join(str(Path.home()), ".local", "bin", "void")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            elif self.os_type == "Windows":
+                # Check common installation paths
+                paths = [
+                    os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "VOID", "VOID.exe"),
+                    os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "VOID", "VOID.exe"),
+                    os.path.join(os.environ.get("LOCALAPPDATA", "C:\\Users\\User\\AppData\\Local"), "Programs", "VOID", "VOID.exe")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            
+            return None
+        except Exception:
+            return None
+    
+    def _detect_cline(self) -> Optional[str]:
+        """Detect if Cline is installed."""
         try:
             result = subprocess.run(
-                command.split(), 
-                capture_output=True, 
-                text=True, 
-                check=False
+                "pip show cline", 
+                shell=True, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True
             )
             if result.returncode == 0:
-                # Try to extract version number (assumes version is in the first line)
-                version_line = result.stdout.strip().split('\n')[0]
-                return version_line
+                return "pip:cline"
+            
+            return None
+        except Exception:
+            return None
+    
+    def _detect_roo(self) -> Optional[str]:
+        """Detect if Roo Code is installed."""
+        try:
+            if self.os_type == "Darwin":  # macOS
+                app_path = "/Applications/Roo.app"
+                if os.path.exists(app_path):
+                    return app_path
+            elif self.os_type == "Linux":
+                # Check common installation paths
+                paths = [
+                    "/usr/bin/roo",
+                    "/usr/local/bin/roo",
+                    os.path.join(str(Path.home()), ".local", "bin", "roo")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            elif self.os_type == "Windows":
+                # Check common installation paths
+                paths = [
+                    os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "Roo", "Roo.exe"),
+                    os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "Roo", "Roo.exe"),
+                    os.path.join(os.environ.get("LOCALAPPDATA", "C:\\Users\\User\\AppData\\Local"), "Programs", "Roo", "Roo.exe")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            
+            return None
+        except Exception:
+            return None
+    
+    def _detect_aider(self) -> Optional[str]:
+        """Detect if Aider is installed."""
+        try:
+            result = subprocess.run(
+                "pip show aider-chat", 
+                shell=True, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            if result.returncode == 0:
+                return "pip:aider-chat"
+            
+            return None
+        except Exception:
+            return None
+    
+    def _get_vscode_version(self, tool: str) -> str:
+        """Get the version of Visual Studio Code or VS Code Insiders."""
+        try:
+            cmd = "code --version" if tool == "vscode" else "code-insiders --version"
+            result = subprocess.run(
+                cmd, 
+                shell=True, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            if result.returncode == 0:
+                # First line of output is the version
+                return result.stdout.strip().split("\n")[0]
+            
+            return "Unknown"
+        except Exception:
+            return "Unknown"
+    
+    def _get_tool_version(self, tool: str) -> str:
+        """Get the version of a tool."""
+        try:
+            cmd = f"pip show {tool}"
+            result = subprocess.run(
+                cmd, 
+                shell=True, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            if result.returncode == 0:
+                # Extract version from pip show output
+                for line in result.stdout.strip().split("\n"):
+                    if line.startswith("Version:"):
+                        return line.split("Version:")[1].strip()
+            
+            return "Unknown"
+        except Exception:
+            return "Unknown"
+    
+    def _detect_conda_environments(self) -> List[Dict[str, str]]:
+        """Detect Conda environments."""
+        environments = []
+        
+        try:
+            # Check if conda is installed
+            result = subprocess.run(
+                "conda info --envs --json", 
+                shell=True, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            if result.returncode == 0:
+                try:
+                    conda_info = json.loads(result.stdout)
+                    for env in conda_info.get("envs", []):
+                        env_name = os.path.basename(env)
+                        environments.append({
+                            "name": env_name,
+                            "path": env
+                        })
+                except json.JSONDecodeError:
+                    pass
         except Exception:
             pass
         
-        return None
+        return environments
     
-    def _get_generic_version(self, name: str) -> Optional[str]:
-        """Get version for tools without standard version flags."""
-        # This is a placeholder - implement specific version detection logic
-        # for tools that don't follow standard --version pattern
-        return "Unknown"
-
+    def _detect_vscode_extensions(self, tool: str) -> List[Dict[str, str]]:
+        """Detect installed VS Code extensions."""
+        extensions = []
+        
+        try:
+            cmd = "code --list-extensions --show-versions" if tool == "vscode" else "code-insiders --list-extensions --show-versions"
+            result = subprocess.run(
+                cmd, 
+                shell=True, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            if result.returncode == 0:
+                for line in result.stdout.strip().split("\n"):
+                    if line:
+                        parts = line.split("@")
+                        if len(parts) == 2:
+                            extensions.append({
+                                "id": parts[0],
+                                "version": parts[1],
+                                "name": parts[0].split(".")[-1]
+                            })
+                        else:
+                            extensions.append({
+                                "id": line,
+                                "version": "Unknown",
+                                "name": line.split(".")[-1]
+                            })
+        except Exception:
+            pass
+        
+        return extensions
 
 if __name__ == "__main__":
+    # For testing purposes
     detector = EnvironmentDetector()
-    results = detector.detect_all()
-    
-    print("\n=== System Detection Results ===\n")
-    print(f"OS: {results['os_info']['system']} {results['os_info']['release']}")
-    print(f"Python: {results['os_info']['python_version']}")
-    
-    print("\n=== Detected IDEs ===")
-    for ide, info in results['ides'].items():
-        print(f"✓ {ide.upper()}: {info.get('version', 'Unknown version')}")
-    
-    print("\n=== Detected AI Tools ===")
-    for tool, info in results['ai_tools'].items():
-        print(f"✓ {tool.upper()}: {info.get('version', 'Unknown version')}")
-    
-    print("\n=== Conda Environments ===")
-    for env in results['conda_environments']:
-        print(f"✓ {env['name']}")
-    
-    print("\n=== VS Code Extensions ===")
-    for ext in results['vscode_extensions'][:5]:  # Show only first 5
-        print(f"✓ {ext['id']}")
-    
-    if len(results['vscode_extensions']) > 5:
-        print(f"  ... and {len(results['vscode_extensions']) - 5} more")
-    
-    print("\nDetection complete!")
+    results = detector.detect_environments()
+    print(json.dumps(results, indent=2))

@@ -1,113 +1,87 @@
 #!/usr/bin/env python3
 """
-installer.py - Tool installation and configuration module for Dev Environment Readyifier
+installer.py - Installation management for Dev Environment Readyifier
 
-This module handles the installation of missing tools and extensions,
-as well as applying configurations to selected tools.
+This script handles the installation of missing tools and application of
+configurations for development environments.
 """
 
 import os
 import sys
-import subprocess
-import platform
 import json
-import shutil
+import platform
+import subprocess
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 
 class ToolInstaller:
-    """Handles installation of tools and extensions."""
+    """Manages the installation of missing tools and application of configurations."""
     
-    def __init__(self, detection_results: Dict, config_choices: Dict):
-        self.detection_results = detection_results
-        self.config_choices = config_choices
+    def __init__(self, detection_results=None, config_choices=None):
+        """Initialize the installer with detection results and configuration choices."""
+        self.detection_results = detection_results or {}
+        self.config_choices = config_choices or {}
         self.os_type = platform.system()
-        self.install_results = {
-            "success": [],
-            "failed": [],
-            "skipped": []
-        }
+        self.repo_base_dir = self._get_repo_base_dir()
     
-    def install_missing_tools(self, tools_to_install: List[str]) -> Dict:
-        """Install missing tools from the provided list."""
+    def install_missing_tools(self, tools_to_install: List[str]) -> Dict[str, Any]:
+        """Install missing tools."""
+        results = {
+            "success": [],
+            "failed": []
+        }
+        
         print("\n" + "="*60)
         print("  INSTALLING MISSING TOOLS")
         print("="*60)
         
         for tool in tools_to_install:
-            print(f"\nAttempting to install {tool}...")
-            success = self._install_tool(tool)
-            
-            if success:
-                print(f"✓ Successfully installed {tool}")
-                self.install_results["success"].append(tool)
+            print(f"\nInstalling {tool}...")
+            if self._install_tool(tool):
+                results["success"].append(tool)
+                print(f"  ✓ Successfully installed {tool}")
             else:
-                print(f"✗ Failed to install {tool}")
-                self.install_results["failed"].append(tool)
+                results["failed"].append(tool)
+                print(f"  ✗ Failed to install {tool}")
         
-        return self.install_results
+        return results
     
-    def install_extensions(self, ide: str, extensions: List[str]) -> Dict:
-        """Install extensions for the specified IDE."""
-        print(f"\nInstalling extensions for {ide.upper()}...")
-        
-        extension_results = {
+    def apply_configurations(self) -> Dict[str, Any]:
+        """Apply configurations to selected tools."""
+        results = {
             "success": [],
             "failed": []
         }
         
-        for extension in extensions:
-            print(f"  Installing {extension}...")
-            success = self._install_extension(ide, extension)
-            
-            if success:
-                print(f"  ✓ Successfully installed {extension}")
-                extension_results["success"].append(extension)
-            else:
-                print(f"  ✗ Failed to install {extension}")
-                extension_results["failed"].append(extension)
-        
-        return extension_results
-    
-    def apply_configurations(self) -> Dict:
-        """Apply configurations to selected tools."""
         print("\n" + "="*60)
         print("  APPLYING CONFIGURATIONS")
         print("="*60)
         
-        config_results = {
-            "success": [],
-            "failed": []
-        }
+        # Get selected tools
+        selected_tools = self.config_choices.get("selected_tools", {})
         
-        # Apply configurations for each selected tool
-        for tool, selected in self.config_choices.get("selected_tools", {}).items():
-            if not selected:
-                continue
-                
-            print(f"\nConfiguring {tool.upper()}...")
-            success = self._apply_tool_config(tool)
-            
-            if success:
-                print(f"✓ Successfully configured {tool}")
-                config_results["success"].append(tool)
-            else:
-                print(f"✗ Failed to configure {tool}")
-                config_results["failed"].append(tool)
+        # Apply configurations to each selected tool
+        for tool, selected in selected_tools.items():
+            if selected:
+                print(f"\nConfiguring {tool}...")
+                if self._configure_tool(tool):
+                    results["success"].append(tool)
+                    print(f"  ✓ Successfully configured {tool}")
+                else:
+                    results["failed"].append(tool)
+                    print(f"  ✗ Failed to configure {tool}")
         
         # Set up reference structure if selected
-        if self.config_choices.get("reference_structure", False):
-            print("\nSetting up reference data structure...")
-            success = self._setup_reference_structure()
-            
-            if success:
-                print("✓ Successfully set up reference structure")
-                config_results["success"].append("reference_structure")
+        if self.config_choices.get("options", {}).get("reference_structure", False):
+            print("\nSetting up reference structure...")
+            if self._setup_reference_structure():
+                results["success"].append("reference_structure")
+                print("  ✓ Successfully set up reference structure")
             else:
-                print("✗ Failed to set up reference structure")
-                config_results["failed"].append("reference_structure")
+                results["failed"].append("reference_structure")
+                print("  ✗ Failed to set up reference structure")
         
-        return config_results
+        return results
     
     def _install_tool(self, tool: str) -> bool:
         """Install a specific tool."""
@@ -127,10 +101,10 @@ class ToolInstaller:
             elif tool == "aider":
                 return self._install_aider()
             else:
-                print(f"Unknown tool: {tool}")
+                print(f"  Unknown tool: {tool}")
                 return False
         except Exception as e:
-            print(f"Error installing {tool}: {e}")
+            print(f"  Error installing {tool}: {e}")
             return False
     
     def _install_vscode(self) -> bool:
@@ -139,22 +113,21 @@ class ToolInstaller:
             if self.os_type == "Darwin":  # macOS
                 return self._run_command("brew install --cask visual-studio-code")
             elif self.os_type == "Linux":
-                # This is a simplified version - would need distro detection in real implementation
-                return self._run_command(
-                    "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o microsoft.gpg && "
-                    "sudo mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg && "
-                    "sudo sh -c 'echo \"deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main\" > /etc/apt/sources.list.d/vscode.list' && "
-                    "sudo apt update && sudo apt install -y code"
-                )
+                # For Ubuntu/Debian
+                return self._run_command("""
+                    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg &&
+                    sudo install -o root -g root -m 644 packages.microsoft.gpg /etc/apt/trusted.gpg.d/ &&
+                    sudo sh -c 'echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/trusted.gpg.d/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list' &&
+                    rm -f packages.microsoft.gpg &&
+                    sudo apt update &&
+                    sudo apt install -y code
+                """)
             elif self.os_type == "Windows":
-                # For Windows, we'd typically use winget or chocolatey
-                # This is a placeholder
-                print("For Windows, please download VS Code from https://code.visualstudio.com/download")
-                return False
+                return self._run_command("winget install -e --id Microsoft.VisualStudioCode")
             
             return False
         except Exception as e:
-            print(f"Error installing VS Code: {e}")
+            print(f"  Error installing VS Code: {e}")
             return False
     
     def _install_vscode_insiders(self) -> bool:
@@ -163,181 +136,290 @@ class ToolInstaller:
             if self.os_type == "Darwin":  # macOS
                 return self._run_command("brew install --cask visual-studio-code-insiders")
             elif self.os_type == "Linux":
-                # Similar to VS Code but for Insiders
-                return self._run_command(
-                    "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o microsoft.gpg && "
-                    "sudo mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg && "
-                    "sudo sh -c 'echo \"deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main\" > /etc/apt/sources.list.d/vscode.list' && "
-                    "sudo apt update && sudo apt install -y code-insiders"
-                )
+                # For Ubuntu/Debian
+                return self._run_command("""
+                    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg &&
+                    sudo install -o root -g root -m 644 packages.microsoft.gpg /etc/apt/trusted.gpg.d/ &&
+                    sudo sh -c 'echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/trusted.gpg.d/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list' &&
+                    rm -f packages.microsoft.gpg &&
+                    sudo apt update &&
+                    sudo apt install -y code-insiders
+                """)
             elif self.os_type == "Windows":
-                print("For Windows, please download VS Code Insiders from https://code.visualstudio.com/insiders/")
-                return False
+                return self._run_command("winget install -e --id Microsoft.VisualStudioCode.Insiders")
             
             return False
         except Exception as e:
-            print(f"Error installing VS Code Insiders: {e}")
+            print(f"  Error installing VS Code Insiders: {e}")
             return False
     
     def _install_trae(self) -> bool:
         """Install Trae IDE."""
-        # This is a placeholder - would need actual installation instructions
-        print("Trae IDE installation is not yet automated.")
-        print("Please visit the Trae IDE website for installation instructions.")
+        print("  Trae IDE installation requires manual download from the official website.")
+        print("  Please visit https://trae.ai/ to download and install.")
         return False
     
     def _install_void(self) -> bool:
         """Install VOID IDE."""
-        # This is a placeholder - would need actual installation instructions
-        print("VOID IDE installation is not yet automated.")
-        print("Please visit the VOID IDE website for installation instructions.")
+        print("  VOID IDE installation requires manual download from the official website.")
+        print("  Please visit the VOID IDE website to download and install.")
         return False
     
     def _install_cline(self) -> bool:
         """Install Cline."""
         try:
-            # Assuming Cline is a Python package
-            return self._run_command("pip install --upgrade cline")
+            return self._run_command("pip install --force-reinstall --no-cache-dir cline")
         except Exception as e:
-            print(f"Error installing Cline: {e}")
+            print(f"  Error installing Cline: {e}")
             return False
     
     def _install_roo(self) -> bool:
         """Install Roo Code."""
-        try:
-            # Assuming Roo is a Python package
-            return self._run_command("pip install --upgrade roo-code")
-        except Exception as e:
-            print(f"Error installing Roo Code: {e}")
-            return False
+        print("  Roo Code installation requires manual download from the official website.")
+        print("  Please visit the Roo Code website to download and install.")
+        return False
     
     def _install_aider(self) -> bool:
         """Install Aider."""
         try:
-            # Aider is a Python package
-            return self._run_command("pip install --upgrade aider-chat")
+            return self._run_command("pip install --force-reinstall --no-cache-dir aider-chat")
         except Exception as e:
-            print(f"Error installing Aider: {e}")
+            print(f"  Error installing Aider: {e}")
             return False
     
-    def _install_extension(self, ide: str, extension: str) -> bool:
-        """Install an extension for the specified IDE."""
+    def _configure_tool(self, tool: str) -> bool:
+        """Configure a specific tool."""
         try:
-            if ide == "vscode" or ide == "vscode_insiders":
-                cmd = "code"
-                if ide == "vscode_insiders":
-                    cmd = "code-insiders"
-                
-                return self._run_command(f"{cmd} --install-extension {extension}")
+            if tool in ["vscode", "vscode_insiders"]:
+                return self._configure_vscode(tool)
+            elif tool == "trae":
+                return self._configure_trae()
+            elif tool == "void":
+                return self._configure_void()
+            elif tool == "cline":
+                return self._configure_cline()
+            elif tool == "roo":
+                return self._configure_roo()
+            elif tool == "aider":
+                return self._configure_aider()
             else:
-                print(f"Extension installation not supported for {ide}")
+                print(f"  Unknown tool: {tool}")
                 return False
         except Exception as e:
-            print(f"Error installing extension {extension} for {ide}: {e}")
+            print(f"  Error configuring {tool}: {e}")
             return False
     
-    def _apply_tool_config(self, tool: str) -> bool:
-        """Apply configuration for a specific tool."""
+    def _configure_vscode(self, tool: str) -> bool:
+        """Configure Visual Studio Code or VS Code Insiders."""
         try:
-            # Get the base directory for configurations
-            base_dir = self._get_repo_base_dir()
-            if not base_dir:
-                print("Could not determine repository base directory")
+            config_dir = self._get_tool_config_dir(tool)
+            if not config_dir:
+                print(f"  Could not determine configuration directory for {tool}")
                 return False
             
-            # Get the template directory
-            template_dir = os.path.join(base_dir, "templates")
+            # Ensure config directory exists
+            os.makedirs(config_dir, exist_ok=True)
             
-            # Get the security level
-            security_level = self.config_choices.get("security_level", "standard")
+            # Copy .cursorrules
+            cursorrules_src = os.path.join(self.repo_base_dir, "templates", "ai_rules", ".cursorrules")
+            cursorrules_dest = os.path.join(config_dir, ".cursorrules")
             
-            # Apply AI rules
-            if tool in ["vscode", "vscode_insiders", "trae", "void"]:
-                # Copy .cursorrules to appropriate location
-                cursorrules_src = os.path.join(template_dir, "ai_rules", ".cursorrules")
-                cursorrules_dest = self._get_tool_config_dir(tool)
-                
-                if cursorrules_dest:
-                    os.makedirs(cursorrules_dest, exist_ok=True)
-                    shutil.copy(cursorrules_src, os.path.join(cursorrules_dest, ".cursorrules"))
-                    print(f"  ✓ Applied .cursorrules to {tool}")
-                else:
-                    print(f"  ✗ Could not determine config directory for {tool}")
-                    return False
+            if os.path.exists(cursorrules_src):
+                os.makedirs(os.path.dirname(cursorrules_dest), exist_ok=True)
+                with open(cursorrules_src, 'r') as src_file:
+                    with open(cursorrules_dest, 'w') as dest_file:
+                        dest_file.write(src_file.read())
+                print(f"  Copied .cursorrules to {cursorrules_dest}")
             
-            # Apply security configurations
-            security_src = os.path.join(template_dir, "security", f"{security_level}.json")
-            if os.path.exists(security_src):
-                security_dest = self._get_tool_config_dir(tool)
-                if security_dest:
-                    os.makedirs(security_dest, exist_ok=True)
-                    shutil.copy(security_src, os.path.join(security_dest, "security_config.json"))
-                    print(f"  ✓ Applied {security_level} security config to {tool}")
-                else:
-                    print(f"  ✗ Could not determine config directory for {tool}")
-                    return False
-            
-            # Apply tool-specific configurations
-            tool_config_src = os.path.join(base_dir, "configs", tool)
-            if os.path.exists(tool_config_src):
-                tool_config_dest = self._get_tool_config_dir(tool)
-                if tool_config_dest:
-                    # Copy all files from tool config directory
-                    for item in os.listdir(tool_config_src):
-                        s = os.path.join(tool_config_src, item)
-                        d = os.path.join(tool_config_dest, item)
-                        if os.path.isfile(s):
-                            shutil.copy2(s, d)
-                        elif os.path.isdir(s):
-                            shutil.copytree(s, d, dirs_exist_ok=True)
-                    
-                    print(f"  ✓ Applied tool-specific configs to {tool}")
-                else:
-                    print(f"  ✗ Could not determine config directory for {tool}")
-                    return False
+            # Install recommended extensions
+            self._install_vscode_extensions(tool)
             
             return True
         except Exception as e:
-            print(f"Error applying configuration for {tool}: {e}")
+            print(f"  Error configuring {tool}: {e}")
+            return False
+    
+    def _install_vscode_extensions(self, tool: str) -> bool:
+        """Install recommended VS Code extensions."""
+        try:
+            # Get recommended extensions
+            extensions_file = os.path.join(self.repo_base_dir, "templates", "recommended_extensions.json")
+            if not os.path.exists(extensions_file):
+                print("  Recommended extensions file not found")
+                return False
+            
+            with open(extensions_file, 'r') as f:
+                extensions_data = json.load(f)
+            
+            # Get extensions for the tool
+            tool_key = "vscode" if tool == "vscode" or tool == "vscode_insiders" else tool
+            if tool_key not in extensions_data:
+                print(f"  No recommended extensions found for {tool}")
+                return False
+            
+            extensions = []
+            for category, exts in extensions_data[tool_key].items():
+                extensions.extend([ext["id"] for ext in exts if "id" in ext])
+            
+            # Install extensions
+            cli_cmd = "code" if tool == "vscode" else "code-insiders"
+            for ext_id in extensions:
+                print(f"  Installing extension: {ext_id}")
+                self._run_command(f"{cli_cmd} --install-extension {ext_id}")
+            
+            return True
+        except Exception as e:
+            print(f"  Error installing extensions: {e}")
+            return False
+    
+    def _configure_trae(self) -> bool:
+        """Configure Trae IDE."""
+        try:
+            config_dir = self._get_tool_config_dir("trae")
+            if not config_dir:
+                print("  Could not determine configuration directory for Trae")
+                return False
+            
+            # Ensure config directory exists
+            os.makedirs(config_dir, exist_ok=True)
+            
+            # Copy .cursorrules
+            cursorrules_src = os.path.join(self.repo_base_dir, "templates", "ai_rules", ".cursorrules")
+            cursorrules_dest = os.path.join(config_dir, ".cursorrules")
+            
+            if os.path.exists(cursorrules_src):
+                os.makedirs(os.path.dirname(cursorrules_dest), exist_ok=True)
+                with open(cursorrules_src, 'r') as src_file:
+                    with open(cursorrules_dest, 'w') as dest_file:
+                        dest_file.write(src_file.read())
+                print(f"  Copied .cursorrules to {cursorrules_dest}")
+            
+            return True
+        except Exception as e:
+            print(f"  Error configuring Trae: {e}")
+            return False
+    
+    def _configure_void(self) -> bool:
+        """Configure VOID IDE."""
+        try:
+            config_dir = self._get_tool_config_dir("void")
+            if not config_dir:
+                print("  Could not determine configuration directory for VOID")
+                return False
+            
+            # Ensure config directory exists
+            os.makedirs(config_dir, exist_ok=True)
+            
+            # Copy .cursorrules
+            cursorrules_src = os.path.join(self.repo_base_dir, "templates", "ai_rules", ".cursorrules")
+            cursorrules_dest = os.path.join(config_dir, ".cursorrules")
+            
+            if os.path.exists(cursorrules_src):
+                os.makedirs(os.path.dirname(cursorrules_dest), exist_ok=True)
+                with open(cursorrules_src, 'r') as src_file:
+                    with open(cursorrules_dest, 'w') as dest_file:
+                        dest_file.write(src_file.read())
+                print(f"  Copied .cursorrules to {cursorrules_dest}")
+            
+            return True
+        except Exception as e:
+            print(f"  Error configuring VOID: {e}")
+            return False
+    
+    def _configure_cline(self) -> bool:
+        """Configure Cline."""
+        try:
+            config_dir = self._get_tool_config_dir("cline")
+            if not config_dir:
+                print("  Could not determine configuration directory for Cline")
+                return False
+            
+            # Ensure config directory exists
+            os.makedirs(config_dir, exist_ok=True)
+            
+            # Copy .cursorrules
+            cursorrules_src = os.path.join(self.repo_base_dir, "templates", "ai_rules", ".cursorrules")
+            cursorrules_dest = os.path.join(config_dir, ".cursorrules")
+            
+            if os.path.exists(cursorrules_src):
+                os.makedirs(os.path.dirname(cursorrules_dest), exist_ok=True)
+                with open(cursorrules_src, 'r') as src_file:
+                    with open(cursorrules_dest, 'w') as dest_file:
+                        dest_file.write(src_file.read())
+                print(f"  Copied .cursorrules to {cursorrules_dest}")
+            
+            return True
+        except Exception as e:
+            print(f"  Error configuring Cline: {e}")
+            return False
+    
+    def _configure_roo(self) -> bool:
+        """Configure Roo Code."""
+        try:
+            config_dir = self._get_tool_config_dir("roo")
+            if not config_dir:
+                print("  Could not determine configuration directory for Roo")
+                return False
+            
+            # Ensure config directory exists
+            os.makedirs(config_dir, exist_ok=True)
+            
+            # Copy .cursorrules
+            cursorrules_src = os.path.join(self.repo_base_dir, "templates", "ai_rules", ".cursorrules")
+            cursorrules_dest = os.path.join(config_dir, ".cursorrules")
+            
+            if os.path.exists(cursorrules_src):
+                os.makedirs(os.path.dirname(cursorrules_dest), exist_ok=True)
+                with open(cursorrules_src, 'r') as src_file:
+                    with open(cursorrules_dest, 'w') as dest_file:
+                        dest_file.write(src_file.read())
+                print(f"  Copied .cursorrules to {cursorrules_dest}")
+            
+            return True
+        except Exception as e:
+            print(f"  Error configuring Roo: {e}")
+            return False
+    
+    def _configure_aider(self) -> bool:
+        """Configure Aider."""
+        try:
+            config_dir = self._get_tool_config_dir("aider")
+            if not config_dir:
+                print("  Could not determine configuration directory for Aider")
+                return False
+            
+            # Ensure config directory exists
+            os.makedirs(config_dir, exist_ok=True)
+            
+            # Copy .cursorrules
+            cursorrules_src = os.path.join(self.repo_base_dir, "templates", "ai_rules", ".cursorrules")
+            cursorrules_dest = os.path.join(config_dir, ".cursorrules")
+            
+            if os.path.exists(cursorrules_src):
+                os.makedirs(os.path.dirname(cursorrules_dest), exist_ok=True)
+                with open(cursorrules_src, 'r') as src_file:
+                    with open(cursorrules_dest, 'w') as dest_file:
+                        dest_file.write(src_file.read())
+                print(f"  Copied .cursorrules to {cursorrules_dest}")
+            
+            return True
+        except Exception as e:
+            print(f"  Error configuring Aider: {e}")
             return False
     
     def _setup_reference_structure(self) -> bool:
         """Set up reference data structure."""
         try:
-            # Get the base directory for the user's projects
             projects_dir = self._get_projects_dir()
-            if not projects_dir:
-                print("Could not determine projects directory")
-                return False
-            
-            # Get the template directory
-            base_dir = self._get_repo_base_dir()
-            if not base_dir:
-                print("Could not determine repository base directory")
-                return False
-            
-            template_dir = os.path.join(base_dir, "templates", "reference")
-            
-            # Create reference structure
             reference_dir = os.path.join(projects_dir, "reference")
-            os.makedirs(reference_dir, exist_ok=True)
             
-            # Create subdirectories
-            subdirs = ["org", "tech", "security", "api", "workflow"]
-            for subdir in subdirs:
-                os.makedirs(os.path.join(reference_dir, subdir), exist_ok=True)
+            # Create reference directory structure
+            os.makedirs(os.path.join(reference_dir, "org_info"), exist_ok=True)
+            os.makedirs(os.path.join(reference_dir, "tech_specs"), exist_ok=True)
+            os.makedirs(os.path.join(reference_dir, "security"), exist_ok=True)
+            os.makedirs(os.path.join(reference_dir, "api_docs"), exist_ok=True)
             
-            # Copy template files if they exist
-            if os.path.exists(template_dir):
-                for item in os.listdir(template_dir):
-                    s = os.path.join(template_dir, item)
-                    d = os.path.join(reference_dir, item)
-                    if os.path.isfile(s):
-                        shutil.copy2(s, d)
-                    elif os.path.isdir(s):
-                        shutil.copytree(s, d, dirs_exist_ok=True)
-            
-            print(f"  ✓ Created reference structure at {reference_dir}")
+            print(f"  Created reference structure in {reference_dir}")
             return True
         except Exception as e:
             print(f"Error setting up reference structure: {e}")
@@ -428,7 +510,6 @@ class ToolInstaller:
             print(f"Error running command: {e}")
             return False
 
-
 if __name__ == "__main__":
     # For testing purposes, create sample data
     sample_detection = {
@@ -451,8 +532,10 @@ if __name__ == "__main__":
             "aider": True
         },
         "security_level": "standard",
-        "ai_personality": "default",
-        "reference_structure": True
+        "options": {
+            "ai_personality": "default",
+            "reference_structure": True
+        }
     }
     
     # Create installer and test

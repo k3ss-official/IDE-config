@@ -2,42 +2,29 @@
 """
 setup.py - Main entry point for Dev Environment Readyifier
 
-This script integrates all components of the Dev Environment Readyifier,
-including environment detection, extension management, AI rules configuration,
-and repository context management.
+This script orchestrates the detection, configuration, and installation
+of development environments and tools.
 """
 
 import os
 import sys
-import json
 import argparse
-from pathlib import Path
-
-# Add scripts directory to path
-sys.path.append(os.path.join(os.path.dirname(__file__), "scripts"))
-
-# Import components
-try:
-    from scripts.detector import EnvironmentDetector
-    from scripts.configurator import EnvironmentConfigurator
-    from scripts.installer import ToolInstaller
-    from scripts.gui_manager import GUIManager
-    from scripts.extension_manager import ExtensionManager
-    from scripts.repo_context import RepoContextManager
-    from scripts.file_structure_manager import FileStructureManager
-except ImportError as e:
-    print(f"Error importing components: {e}")
-    print("Make sure you're running this script from the repository root.")
-    sys.exit(1)
+from scripts.detector import EnvironmentDetector
+from scripts.configurator import EnvironmentConfigurator
+from scripts.installer import ToolInstaller
+from scripts.extension_manager import ExtensionManager
+from scripts.repo_context import RepoContextManager
+from scripts.file_structure_manager import FileStructureManager
 
 def main():
-    """Main entry point for the Dev Environment Readyifier."""
+    """Main entry point for the application."""
+    # Parse command line arguments
     parser = argparse.ArgumentParser(description="Dev Environment Readyifier")
-    parser.add_argument("--no-gui", action="store_true", help="Run in command-line mode without GUI")
-    parser.add_argument("--install-all", action="store_true", help="Automatically install all missing tools and extensions")
+    parser.add_argument("--no-gui", action="store_true", help="Run in command-line mode")
+    parser.add_argument("--install-all", action="store_true", help="Install all missing tools and extensions")
     parser.add_argument("--repo-path", type=str, help="Path to repository for context management")
     args = parser.parse_args()
-
+    
     # Determine repository path
     repo_path = args.repo_path if args.repo_path else os.getcwd()
     
@@ -47,15 +34,10 @@ def main():
     print("=" * 80)
     print(f"Repository path: {repo_path}")
     print()
-
+    
     # Initialize components
     detector = EnvironmentDetector()
-    configurator = EnvironmentConfigurator()
-    installer = ToolInstaller()
-    extension_manager = ExtensionManager(os.path.join(os.path.dirname(__file__), "templates", "recommended_extensions.json"))
-    repo_context_manager = RepoContextManager(repo_path)
-    file_structure_manager = FileStructureManager(repo_path)
-
+    
     # Detect environments
     print("Detecting installed development environments...")
     environments = detector.detect_environments()
@@ -63,7 +45,14 @@ def main():
     for env_name, env_info in environments.items():
         print(f"  - {env_name}: {env_info.get('path', 'Unknown path')}")
     print()
-
+    
+    # Initialize remaining components with detected environments
+    configurator = EnvironmentConfigurator(environments)
+    installer = ToolInstaller(environments, {})  # Empty config for now, will be populated later
+    extension_manager = ExtensionManager(os.path.join(os.path.dirname(__file__), "templates", "recommended_extensions.json"))
+    repo_context_manager = RepoContextManager(repo_path)
+    file_structure_manager = FileStructureManager(repo_path)
+    
     # Check for missing extensions
     print("Checking for missing extensions...")
     missing_extensions = extension_manager.detect_missing_extensions()
@@ -75,7 +64,7 @@ def main():
     else:
         print("No missing extensions found.")
     print()
-
+    
     # Check file sizes
     print("Checking file sizes...")
     large_files = file_structure_manager.check_file_sizes()
@@ -88,11 +77,11 @@ def main():
     else:
         print("No files exceed the 200-line limit.")
     print()
-
+    
     # If GUI mode is enabled and tkinter is available
     if not args.no_gui:
         try:
-            import tkinter
+            from scripts.gui_manager import GUIManager
             print("Starting GUI...")
             gui = GUIManager(
                 environments=environments,
@@ -107,7 +96,7 @@ def main():
         except ImportError:
             print("Tkinter not available, falling back to command-line mode.")
             print()
-
+    
     # Command-line mode
     if args.install_all:
         # Install all missing extensions
@@ -151,4 +140,9 @@ def main():
         print("Run with --repo-path to specify a different repository path.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"Error: {e}")
+        print("If you're seeing import errors, make sure you're running this script from the repository root.")
+        sys.exit(1)
