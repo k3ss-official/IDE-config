@@ -1,102 +1,52 @@
 #!/usr/bin/env python3
 """
-configurator.py - Interactive configuration module for Dev Environment Readyifier
+configurator.py - Configuration management for Dev Environment Readyifier
 
-This module provides an interactive interface for selecting which tools to configure
-and what settings to apply to each.
+This script handles the configuration of development environments, including
+IDE settings, extensions, and AI assistant rules.
 """
 
 import os
 import sys
 import json
-from typing import Dict, List, Any, Optional
 from pathlib import Path
 
-class ConfigurationManager:
-    """Manages the interactive configuration process."""
+class EnvironmentConfigurator:
+    """Manages the configuration of development environments."""
     
-    def __init__(self, detection_results: Dict):
-        self.detection_results = detection_results
+    def __init__(self, detection_results=None):
+        """Initialize the configuration manager with detection results."""
+        self.detection_results = detection_results or {}
         self.selected_tools = {}
-        self.config_options = {}
         self.security_level = "standard"
+        self.config_options = {}
+    
+    def run_interactive_setup(self):
+        """Run the interactive setup process."""
+        print("\n" + "="*60)
+        print("  DEVELOPMENT ENVIRONMENT CONFIGURATION")
+        print("="*60)
         
-    def run_interactive_setup(self) -> Dict:
-        """Run the interactive setup process and return configuration choices."""
-        self._print_welcome()
-        self._display_detected_tools()
         self._select_tools_to_configure()
         self._configure_security_level()
         self._configure_ai_personality()
         self._confirm_selections()
         
+        # Return the configuration
         return {
             "selected_tools": self.selected_tools,
             "security_level": self.security_level,
-            "ai_personality": self.config_options.get("ai_personality", "default"),
-            "reference_structure": self.config_options.get("reference_structure", True)
+            "options": self.config_options
         }
     
-    def _print_welcome(self):
-        """Print welcome message."""
-        print("\n" + "="*60)
-        print("  DEVELOPMENT ENVIRONMENT READYIFIER - CONFIGURATION")
-        print("="*60)
-        print("\nThis wizard will help you configure your development environment.")
-        print("We've detected your installed tools and will help you set them up with")
-        print("optimal settings, security hardening, and AI assistant configurations.")
-        print("\nPress Enter to continue...")
-        input()
-    
-    def _display_detected_tools(self):
-        """Display all detected tools."""
-        print("\n" + "="*60)
-        print("  DETECTED DEVELOPMENT TOOLS")
-        print("="*60)
-        
-        # Display IDEs
-        print("\nIDEs:")
-        if not self.detection_results.get('ides'):
-            print("  No IDEs detected")
-        else:
-            for ide, info in self.detection_results['ides'].items():
-                print(f"  ✓ {ide.upper()}: {info.get('version', 'Unknown version')}")
-        
-        # Display AI Tools
-        print("\nAI Tools:")
-        if not self.detection_results.get('ai_tools'):
-            print("  No AI tools detected")
-        else:
-            for tool, info in self.detection_results['ai_tools'].items():
-                print(f"  ✓ {tool.upper()}: {info.get('version', 'Unknown version')}")
-        
-        # Display Conda Environments
-        print("\nConda Environments:")
-        if not self.detection_results.get('conda_environments'):
-            print("  No Conda environments detected")
-        else:
-            for env in self.detection_results['conda_environments']:
-                print(f"  ✓ {env['name']}")
-        
-        # Display VS Code Extensions (if any)
-        if self.detection_results.get('vscode_extensions'):
-            print("\nVS Code Extensions:")
-            print(f"  {len(self.detection_results['vscode_extensions'])} extensions detected")
-        
-        print("\nPress Enter to continue...")
-        input()
-    
     def _select_tools_to_configure(self):
-        """Allow user to select which tools to configure."""
-        print("\n" + "="*60)
-        print("  SELECT TOOLS TO CONFIGURE")
-        print("="*60)
-        print("\nSelect which tools you want to configure (y/n for each):")
+        """Select which tools to configure."""
+        print("\nSelect tools to configure:")
         
-        # Select IDEs
-        if self.detection_results.get('ides'):
-            print("\nIDEs:")
-            for ide in self.detection_results['ides'].keys():
+        # Configure IDEs
+        if "ides" in self.detection_results:
+            print("\nDetected IDEs:")
+            for ide, info in self.detection_results["ides"].items():
                 while True:
                     response = input(f"  Configure {ide.upper()}? (y/n): ").lower()
                     if response in ['y', 'n']:
@@ -104,9 +54,9 @@ class ConfigurationManager:
                         break
                     print("  Please enter 'y' or 'n'")
         
-        # Select AI Tools
-        if self.detection_results.get('ai_tools'):
-            print("\nAI Tools:")
+        # Configure AI tools
+        if "ai_tools" in self.detection_results:
+            print("\nDetected AI tools:")
             for tool in self.detection_results['ai_tools'].keys():
                 while True:
                     response = input(f"  Configure {tool.upper()}? (y/n): ").lower()
@@ -198,6 +148,8 @@ class ConfigurationManager:
             else:
                 print("  Please enter 'y' or 'n'")
 
+# For backward compatibility
+ConfigurationManager = EnvironmentConfigurator
 
 if __name__ == "__main__":
     # For testing purposes, create a sample detection result
@@ -226,7 +178,7 @@ if __name__ == "__main__":
     }
     
     # Run the configuration manager with sample data
-    config_manager = ConfigurationManager(sample_detection)
+    config_manager = EnvironmentConfigurator(sample_detection)
     config = config_manager.run_interactive_setup()
     
     print("\nConfiguration complete!")
