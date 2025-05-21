@@ -41,9 +41,32 @@ def main():
     # Detect environments
     print("Detecting installed development environments...")
     environments = detector.detect_environments()
-    print(f"Found {len(environments)} environments:")
-    for env_name, env_info in environments.items():
-        print(f"  - {env_name}: {env_info.get('path', 'Unknown path')}")
+    
+    # Print detected environments
+    ide_count = len(environments.get("ides", {}))
+    ai_tool_count = len(environments.get("ai_tools", {}))
+    conda_env_count = len(environments.get("conda_environments", []))
+    total_count = 2 + (1 if ide_count > 0 else 0) + (1 if ai_tool_count > 0 else 0) + (1 if conda_env_count > 0 else 0)
+    
+    print(f"Found {total_count} environment categories:")
+    print(f"  - OS: {environments.get('os_info', {}).get('system', 'Unknown')} {environments.get('os_info', {}).get('release', 'Unknown')}")
+    print(f"  - Python: {environments.get('os_info', {}).get('python_version', 'Unknown')}")
+    
+    if ide_count > 0:
+        print(f"  - IDEs: {ide_count} detected")
+        for ide_name, ide_info in environments.get("ides", {}).items():
+            print(f"    * {ide_name}: {ide_info.get('version', 'Unknown')}")
+    
+    if ai_tool_count > 0:
+        print(f"  - AI Tools: {ai_tool_count} detected")
+        for tool_name, tool_info in environments.get("ai_tools", {}).items():
+            print(f"    * {tool_name}: {tool_info.get('version', 'Unknown')}")
+    
+    if conda_env_count > 0:
+        print(f"  - Conda Environments: {conda_env_count} detected")
+        for env in environments.get("conda_environments", []):
+            print(f"    * {env.get('name', 'Unknown')}")
+    
     print()
     
     # Initialize remaining components with detected environments
