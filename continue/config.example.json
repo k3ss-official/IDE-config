@@ -1,0 +1,46 @@
+{
+  "$schema": "https://raw.githubusercontent.com/continuedev/continue/main/schema.json",
+  "models": [
+    {
+      "title": "qwen2.5-coder-7b",
+      "provider": "ollama",
+      "model": "qwen2.5-coder:7b",
+      "completionOnly": false
+    },
+    {
+      "title": "gemma3-4b",
+      "provider": "ollama",
+      "model": "gemma3:4b",
+      "completionOnly": false
+    }
+  ],
+  "mcpServers": {
+    "filesystem": { "command": "mcp-filesystem" },
+    "shell": { "command": "mcp-shell" },
+    "git": { "command": "mcp-git" },
+    "docker": {"command": "mcp-docker" },
+    "filescope": { "command": "mcp-filescope" },
+    "browser": { "command": "browser-use", "args": ["--mcp"] },
+    "tavily": { "command": "mcp-tavily", "env": { "TAVILY_API_KEY": "$TAVILY_API_KEY" } },
+    "webscrapingai": { "command": "mcp-webscrapingai", "env": { "WSAI_API_KEY": "$WSAI_API_KEY" } },
+    "database": { "command": "mcp-database" }
+  },
+  "routing": {
+    "autocomplete-model": "qwen2.5-coder-7b",
+    "default-model": "qwen2.5-coder-7b",
+    "fast-model": "gemma3-4b",
+    "tools": [
+      "filesystem",
+      "shell",
+      "git",
+      "docker",
+      "browser",
+      "tavily",
+      "webscrapingai",
+      "filescope",
+      "database"
+    ]
+  }
+}
+
+
